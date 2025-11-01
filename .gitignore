@@ -1,0 +1,24 @@
+# Rust
+/target
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Build artifacts
+*.dll
+*.exe
+*.pdb
+*.lib
+
+# Debug
+debug/
+*.dSYM/
