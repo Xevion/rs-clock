@@ -2,8 +2,17 @@
 name = "launcher"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
+
+[build-dependencies]
+chrono = "0.4"
 
 [dependencies]
+ctrlc = "3.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+shared = { version = "0.1.0", path = "../shared" }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.20"
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_Graphics_Gdi"] }
+tracing-tunnel = { version = "0.1.0", features = ["receiver"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_Graphics_Gdi", "Win32_System_Memory", "Win32_Security"] }
