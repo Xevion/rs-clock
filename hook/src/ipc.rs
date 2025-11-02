@@ -41,6 +41,10 @@ impl IpcProducer {
             return Err("MapViewOfFile failed".to_string());
         }
 
+        // Validate we can access the header region
+        let test_read = std::ptr::read_volatile(ptr as *const u8);
+        let _ = test_read; // Suppress unused warning
+
         Ok(Self { ptr, handle })
     }
 
@@ -83,11 +87,17 @@ impl IpcProducer {
             };
 
             let event_size = bytes.len();
+
+            // Validate event size doesn't exceed maximum
+            if event_size > shared::MAX_EVENT_SIZE {
+                return false;
+            }
+
             let total_size = 4 + event_size; // u32 size prefix + event data
 
             let header = self.header();
-            let write_pos = header.write_pos.load(Ordering::Acquire);
-            let read_pos = header.read_pos.load(Ordering::Acquire);
+            let write_pos = header.write_pos.load(Ordering::SeqCst);
+            let read_pos = header.read_pos.load(Ordering::SeqCst);
             let capacity = header.capacity as usize;
 
             // Check if there's enough space (simple check, may be conservative)
@@ -112,9 +122,13 @@ impl IpcProducer {
             let event_offset = (write_pos as usize + 4) % capacity;
             self.write_bytes(data_ptr, event_offset, &bytes, capacity);
 
-            // Update write position
-            let new_write_pos = (write_pos + total_size as u32) % (capacity as u32);
-            header.write_pos.store(new_write_pos, Ordering::Release);
+            // Update write position with overflow check
+            let new_write_pos = write_pos
+                .checked_add(total_size as u32)
+                .map(|pos| pos % (capacity as u32))
+                .unwrap_or(0);
+
+            header.write_pos.store(new_write_pos, Ordering::SeqCst);
 
             true
         }

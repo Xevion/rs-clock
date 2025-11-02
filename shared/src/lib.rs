@@ -20,6 +20,10 @@ pub const HEADER_SIZE: usize = 16;
 /// Size of the ring buffer within shared memory (after header).
 pub const RING_BUFFER_SIZE: usize = SHM_SIZE - HEADER_SIZE;
 
+/// Maximum size for a single IPC event (16KB).
+/// Events larger than this are rejected to prevent memory exhaustion.
+pub const MAX_EVENT_SIZE: usize = 16 * 1024;
+
 /// SPSC ring buffer header in shared memory.
 /// This structure is placed at the start of the shared memory region.
 #[repr(C)]

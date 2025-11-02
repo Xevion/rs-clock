@@ -29,7 +29,7 @@ unsafe fn get_current_process_name() -> String {
     let mut buffer = [0u16; 260]; // MAX_PATH
     let len = GetModuleFileNameW(None, &mut buffer);
 
-    if len > 0 && len < 260 {
+    if len > 0 && (len as usize) < buffer.len() {
         let path = String::from_utf16_lossy(&buffer[..len as usize]);
         // Extract just the filename from the full path
         path.rsplit('\\')
@@ -90,8 +90,8 @@ pub unsafe extern "system" fn DllMain(
 /// Dereferences raw pointer from lparam as CWPSTRUCT.
 #[no_mangle]
 pub unsafe extern "system" fn HookProc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code >= 0 {
-        let window_msg = *(lparam.0 as *const CWPSTRUCT);
+    if code >= 0 && lparam.0 != 0 {
+        let window_msg = &*(lparam.0 as *const CWPSTRUCT);
 
         if is_clock_window(window_msg.hwnd) && CLOCK_HWND.load(Ordering::Relaxed) == 0 {
             install_clock_subclass(window_msg.hwnd);

@@ -55,10 +55,13 @@ impl IpcConsumer {
             return Err("MapViewOfFile failed".to_string());
         }
 
+        // Validate we can access the full memory region
+        std::ptr::write_bytes(ptr, 0, std::mem::size_of::<RingBufferHeader>());
+
         // Initialize ring buffer header at the start of shared memory
         let header = ptr as *mut RingBufferHeader;
-        (*header).write_pos.store(0, Ordering::Release);
-        (*header).read_pos.store(0, Ordering::Release);
+        (*header).write_pos.store(0, Ordering::SeqCst);
+        (*header).read_pos.store(0, Ordering::SeqCst);
         (*header).capacity = RING_BUFFER_SIZE as u32;
 
         debug!("IPC initialized");
@@ -107,8 +110,8 @@ impl IpcConsumer {
     pub fn poll_event(&mut self) -> Option<TracingEvent> {
         unsafe {
             let header = self.header();
-            let read_pos = header.read_pos.load(Ordering::Acquire);
-            let write_pos = header.write_pos.load(Ordering::Acquire);
+            let read_pos = header.read_pos.load(Ordering::SeqCst);
+            let write_pos = header.write_pos.load(Ordering::SeqCst);
 
             if read_pos == write_pos {
                 return None; // Buffer empty
@@ -122,6 +125,15 @@ impl IpcConsumer {
             let mut size_bytes = [0u8; 4];
             self.read_bytes(data_ptr, size_offset, &mut size_bytes, capacity);
             let event_size = u32::from_le_bytes(size_bytes) as usize;
+
+            // Validate event size before allocation
+            if event_size == 0 || event_size > shared::MAX_EVENT_SIZE {
+                error!(size = event_size, "Invalid event size, skipping");
+                // Skip this corrupted event
+                let skip_pos = read_pos.checked_add(4).unwrap_or(0) % (capacity as u32);
+                header.read_pos.store(skip_pos, Ordering::SeqCst);
+                return None;
+            }
 
             // Read event data, handling wrap-around
             let event_offset = (read_pos as usize + 4) % capacity;
@@ -137,9 +149,13 @@ impl IpcConsumer {
                 }
             };
 
-            // Update read position
-            let new_read_pos = (read_pos + 4 + event_size as u32) % (capacity as u32);
-            header.read_pos.store(new_read_pos, Ordering::Release);
+            // Update read position with overflow check
+            let new_read_pos = read_pos
+                .checked_add(4 + event_size as u32)
+                .map(|pos| pos % (capacity as u32))
+                .unwrap_or(0);
+
+            header.read_pos.store(new_read_pos, Ordering::SeqCst);
 
             event
         }

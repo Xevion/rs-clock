@@ -218,7 +218,8 @@ unsafe fn load_hook_dll() -> std::result::Result<HMODULE, String> {
     let dll_path = get_dll_path();
     debug!(path = %dll_path.display(), "Loading hook library");
 
-    let dll_path_wide: Vec<u16> = OsStr::new(dll_path.to_str().unwrap())
+    let dll_path_wide: Vec<u16> = dll_path
+        .as_os_str()
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
@@ -232,10 +233,12 @@ unsafe fn get_hook_functions(dll_handle: HMODULE) -> Option<(InstallHookFn, Remo
 
     debug!("Resolved hook function pointers");
 
-    Some((
-        std::mem::transmute::<unsafe extern "system" fn() -> isize, InstallHookFn>(install_fn),
-        std::mem::transmute::<unsafe extern "system" fn() -> isize, RemoveHookFn>(remove_fn),
-    ))
+    // Cast function pointers with explicit types
+    type RawFn = unsafe extern "system" fn() -> isize;
+    let install_hook = std::mem::transmute::<RawFn, InstallHookFn>(install_fn);
+    let remove_hook = std::mem::transmute::<RawFn, RemoveHookFn>(remove_fn);
+
+    Some((install_hook, remove_hook))
 }
 
 unsafe fn find_clock_window(taskbar: HWND) -> Option<HWND> {
